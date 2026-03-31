@@ -1,0 +1,42 @@
+{
+  "exp_path": "D:\\Work\\Research\\AIDna\\GenerativeSNUPI\\source_code\\GenerativeSNUPI\\exp",
+  "run_name": "DDPM_conditional",
+  "version": "22",
+  "batch_size": 2,
+  "train_lr": 0.0001,
+  "train_num_steps": 200000,
+  "gradient_accumulate_every": 1,
+  "ema_update_every": 10,
+  "ema_decay": 0.995,
+  "adam_betas": [
+    0.9,
+    0.99
+  ],
+  "save_and_sample_every": 500,
+  "num_samples": 2,
+  "split_batches": true,
+  "fp16": false,
+  "use_lion": true,
+  "timesteps": 500,
+  "sampling_timesteps": 500,
+  "objective": "pred_noise",
+  "beta_schedule": "linear",
+  "model_version": "origin",
+  "num_layers": 8,
+  "time_emb_dim": 64,
+  "fiber_hidden": {
+    "0": 32,
+    "1": 32
+  },
+  "num_heads": 8,
+  "channels_div": 2,
+  "num_nearest_neighbors": 30,
+  "num_random_neighbors": 20,
+  "temp": [
+    1.0
+  ],
+  "shape_condition": true,
+  "tensor_cores": true,
+  "low_memory": false,
+  "note": "Shape_functions=21/1.0, zeros_gravity=False, add_verts=False, Fine-tune from exp. 21"
+}
