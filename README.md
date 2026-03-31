@@ -113,7 +113,8 @@ python run_sampling.py --target_shape Flower_Logo.svg --num_samples 5 --design_s
 python run_sampling.py --target_shape 01_triangle.ply --num_samples 3 --design_scaffold_length 600 --device cuda
 
 # PT files (preprocessed tensors)
-python run_sampling.py --target_shape Circle.pt --num_samples 4
+python run_sampling.py --target_shape Circle.pt --num_samples 4 --device cuda
+python run_sampling.py --target_shape Monalisa_v1.pt --num_samples 10 --device cuda --no_plots
 ```
 
 ## Input/Output
@@ -155,7 +156,6 @@ generated_designs/design_name_YYYYMMDD_HHMMSS/
 
 #### Required Parameters
 - **Conditional mode**: `--target_shape` - Path to target shape file
-- **Unconditional mode**: `--num_base_pairs` - Number of base pairs
 
 #### Optional Parameters
 | Parameter | Description | Default |
