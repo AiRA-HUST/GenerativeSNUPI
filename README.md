@@ -1,4 +1,4 @@
-# GenerativeSNUPI
+# Generative SNUPI
 
 > A diffusion-based design framework for DNA Origami nanostructures.
 
