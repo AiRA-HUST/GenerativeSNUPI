@@ -93,7 +93,8 @@ def align(full_base, ox_base):
 #     opts = parse_options()
 
 def oxDNA_PDB(opts):
-    
+    Atom.serial_atom = 1  # reset per export so serial numbers always start from 1
+
     with open(os.path.join(os.path.dirname(__file__), DD12_PDB_PATH)) as f:
         nucleotides = []
         old_residue = ""

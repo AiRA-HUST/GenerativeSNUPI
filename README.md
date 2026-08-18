@@ -217,4 +217,10 @@ This happens because DGL 1.1.2+cu117 requires `libcudart.so.11.0`, `libcublas.so
 
 ## References
 
-**De novo design of DNA origami with a generative diffusion model** *(in preparation)*
+If you use Generative SNUPI in your research, please cite:
+
+- Truong-Quoc, C., Jeon, K., Kim, J., Kwon, S. H., Seo, D., Lee, C., Kim, D.-N. *De novo design of DNA origami with a generative diffusion model.* **Nature Communications** 17, 6792 (2026). — [DOI](https://doi.org/10.1038/s41467-026-73578-z)
+
+The format-conversion utilities under `tacox/` are adapted from **tacoxDNA**:
+
+- Suma, A., Poppleton, E., Matthies, M., Šulc, P., Romano, F., Louis, A. A., Doye, J. P. K., Micheletti, C., Rovigatti, L. *TacoxDNA: A user-friendly web server for simulations of complex DNA structures, from single strands to origami.* **Journal of Computational Chemistry** 40, 2586–2595 (2019). — [GitHub](https://github.com/lorenzo-rovigatti/tacoxDNA)

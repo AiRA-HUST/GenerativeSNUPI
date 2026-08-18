@@ -134,7 +134,7 @@ class Nucleotide(object):
             if not include_hydrogen and atom.name[0] == 'H':
                 continue
                 
-            pdb_entry = atom.to_pdb(chain_id, residue_serial, self.base + residue_suffix, bfactor)
+            pdb_entry = atom.to_pdb(chain_id, residue_serial, residue_suffix, bfactor)
             pdb_entries.append(pdb_entry)
             
         return pdb_entries
@@ -200,8 +200,8 @@ class Atom(object):
         self.pos += diff
 
     def to_pdb(self, chain_identifier, residue_serial, residue_suffix, bfactor):
-        residue = self.residue + residue_suffix
-        res = "{:6s}{:5d} {:^4s}{:1s}{:3s} {:1s}{:4d}{:1s}   {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          {:>2s}{:2s}".format("ATOM", Atom.serial_atom, self.name, " ", residue, chain_identifier, residue_serial, " ", self.pos[0], self.pos[1], self.pos[2], 1.00, bfactor, " ", " ", " ")
+        residue = (self.residue + residue_suffix)[:3]  # PDB cols 18-20: exactly 3 chars
+        res = "{:6s}{:5d} {:^4s}{:1s}{:<3s} {:1s}{:4d}{:1s}   {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          {:>2s}{:2s}".format("ATOM", Atom.serial_atom, self.name, " ", residue, chain_identifier, residue_serial, " ", self.pos[0], self.pos[1], self.pos[2], 1.00, bfactor, " ", " ", " ")
         Atom.serial_atom += 1
         if Atom.serial_atom > 99999:
             Atom.serial_atom = 1
