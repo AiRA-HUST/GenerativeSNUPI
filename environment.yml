@@ -1,0 +1,58 @@
+# Generative SNUPI — conda environment (Linux, NVIDIA GPU, CUDA 12.8)
+#
+#   conda env create -f environment.yml
+#   conda activate generativeSNUPI
+#
+# Works on GPUs with compute capability >= 7.5 (Turing ... Blackwell / RTX 50xx).
+# Requires NVIDIA driver >= 570. No system CUDA toolkit is needed.
+#
+# Notes
+# - DGL 2.4.0 is the final DGL release (officially built for torch <= 2.4). Its CUDA
+#   kernels run correctly with torch 2.8; pip will print a harmless
+#   "dgl 2.4.0+cu124 requires torch<=2.4.0" warning.
+# - setuptools < 70 is required because DGL 2.4 imports `setuptools.extern`.
+name: generativeSNUPI
+channels:
+  - dglteam/label/th24_cu124
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.10
+  - pip
+  - setuptools<70
+  - dglteam/label/th24_cu124::dgl=2.4.0
+  - numpy=1.26.4
+  - scipy=1.15.2
+  - networkx=3.4.2
+  - pyyaml
+  - pydantic
+  - tqdm=4.67.1
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu128
+      - --find-links https://data.pyg.org/whl/torch-2.8.0+cu128.html
+      # PyTorch + PyTorch Geometric
+      - torch==2.8.0+cu128
+      - torch-geometric==2.6.1
+      - torch-cluster==1.6.3+pt28cu128
+      # Model / geometry
+      - e3nn==0.5.6
+      - ema-pytorch==0.7.7
+      - geomloss==0.2.6
+      - roma==1.5.3
+      - einops==0.8.1
+      - accelerate==0.17.1
+      - torchmetrics==0.11.4
+      # Shape I/O and plotting
+      - meshio==5.3.5
+      - shapely==2.0.7
+      - svgpathtools==1.7.1
+      - svgutils==0.3.4
+      - svgwrite==1.4.3
+      - svg.path==7.0
+      - imageio==2.37.0
+      - matplotlib==3.9.4
+      - plotly==6.2.0
+      - pandas==2.3.0
+variables:
+  # Keep packages from ~/.local out of this environment
+  PYTHONNOUSERSITE: "1"

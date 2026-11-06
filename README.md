@@ -13,7 +13,10 @@
 - [Configuration](#configuration)
 - [Development](#development)
 - [Troubleshooting](#troubleshooting)
-  - [CUDA Library Compatibility](#cuda-library-compatibility-system-cuda--117)
+  - [RTX 50xx (Blackwell)](#rtx-50xx-blackwell-sm_120-is-not-compatible--gpu-hangs)
+  - [setuptools.extern error](#modulenotfounderror-no-module-named-setuptoolsextern-when-importing-dgl)
+  - [CUDA out of memory](#cuda-out-of-memory-on-large-shapes)
+  - [CUDA Library Compatibility](#cuda-library-compatibility-legacy-cuda-117-install)
 
 ## Overview
 
@@ -32,10 +35,16 @@
 
 ### Prerequisites
 
-- Python 3.9
-- CUDA 11.7+ (for GPU acceleration)
-- Conda package manager
-- **OS**: Linux only (Ubuntu 20.04+ recommended) — Windows is **not preferred** due to NVTX dependencies and Linux-specific CUDA library paths
+- **OS**: Linux (Ubuntu 20.04+ recommended) — Windows is **not preferred** due to NVTX dependencies and Linux-specific CUDA library paths
+- **GPU**: NVIDIA GPU with compute capability ≥ 7.5 (Turing, Ampere, Ada, Hopper, **Blackwell / RTX 50xx**)
+- **Driver**: NVIDIA driver ≥ 570 (supports CUDA 12.8). No system-wide CUDA toolkit is needed — the CUDA runtime libraries are installed inside the conda environment
+- **Conda** (Anaconda / Miniconda / Miniforge)
+
+Check your GPU and driver with:
+
+```bash
+nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv
+```
 
 ### Environment Setup
 
@@ -64,10 +73,40 @@ cd /path/to/GenerativeSNUPI
 
 > **Tip**: Once the repository is made public, you can switch from Option B to Option A at any time by cloning the URL above.
 
-**Step 2**: Create conda environment
+**Step 2**: Create the conda environment from [`environment.yml`](environment.yml)
+
+```bash
+conda env create -f environment.yml
+conda activate generativeSNUPI
+```
+
+All versions are pinned in `environment.yml`, so every install produces the same environment. Tested on an RTX 5070 Ti (sm_120), driver 580, Ubuntu.
+
+| Component | Version | Source |
+|-----------|---------|--------|
+| Python | 3.10 | conda-forge |
+| PyTorch | 2.8.0 + CUDA 12.8 | pip (`download.pytorch.org/whl/cu128`) |
+| DGL | 2.4.0 (CUDA 12.4 build) | conda (`dglteam/label/th24_cu124`) |
+| PyTorch Geometric | 2.6.1 + `torch-cluster` 1.6.3 | pip (`data.pyg.org`) |
+| NumPy | 1.26.4 | conda-forge |
+
+Notes:
+
+- **DGL / PyTorch version warning** — DGL 2.4.0 is the final DGL release and is officially built for PyTorch ≤ 2.4, which does not support RTX 50xx GPUs. Its CUDA kernels run correctly with PyTorch 2.8, so `pip check` reports `dgl 2.4.0+cu124 has requirement torch<=2.4.0, but you have torch 2.8.0+cu128`. This warning is expected and harmless.
+- **`setuptools<70`** is pinned because DGL 2.4 imports `setuptools.extern`, which was removed in newer setuptools.
+- **`PYTHONNOUSERSITE=1`** is set inside the environment so packages from `~/.local/lib/python3.x` cannot override the pinned versions.
+- Only the compiled PyG extension that the code uses (`torch-cluster`, for `radius_graph` / `knn_graph`) is installed. `torchvision`, `torchaudio`, `torch-scatter`, `torch-sparse` and `torch-spline-conv` are not needed.
+
+To update an existing environment after `environment.yml` changes:
+
+```bash
+conda env update -n generativeSNUPI -f environment.yml --prune
+```
 
 <details>
-<summary><strong>🚀 GPU Installation (CUDA 11.7)</strong></summary>
+<summary><strong>🐢 Legacy installation (CUDA 11.7, PyTorch 1.13.1, Python 3.9) — older GPUs only, not for RTX 50xx</strong></summary>
+
+This is the original setup. PyTorch 1.13.1 only ships kernels up to `sm_86`, so it does **not** work on RTX 50xx (Blackwell, sm_120) GPUs — use `environment.yml` above instead.
 
 ```bash
 # Create environment
@@ -79,23 +118,49 @@ conda install pytorch==1.13.1 torchvision torchaudio pytorch-cuda=11.7 -c pytorc
 
 # Install DGL and PyTorch Geometric
 conda install dglteam/label/cu117::dgl -y
+pip install "setuptools<70"
 pip install torch-geometric==2.2.0 torch-scatter==2.1.1+pt113cu117 torch-sparse==0.6.17+pt113cu117 torch-cluster==1.6.1+pt113cu117 torch-spline-conv==1.2.2+pt113cu117 -f https://data.pyg.org/whl/torch-1.13.1+cu117.html
+
+# Additional dependencies
+pip install ema-pytorch==0.7.7 geomloss==0.2.6 --no-deps
+pip install accelerate==0.17.1 e3nn==0.5.6 einops==0.8.1 imageio==2.37.0 matplotlib==3.9.4 meshio==5.3.5 numpy==1.26.4 pandas==2.3.0 plotly==6.2.0 roma==1.5.3 shapely==2.0.7 svgpathtools==1.7.1 svgutils==0.3.4 svgwrite==1.4.3 torchmetrics==0.11.4 tqdm==4.67.1 svg.path==7.0
 ```
+
+> **Note**: the PyTorch conda install pulls in NumPy 2.x; the last command downgrades it to `numpy==1.26.4`, which PyTorch 1.13.1 requires. See also [CUDA Library Compatibility](#cuda-library-compatibility-legacy-cuda-117-install) if DGL fails to load.
 
 </details>
 
 <details>
 <summary><strong>🖥️ CPU Installation (for systems without GPU)</strong></summary>
 
-> **⚠️ Warning**: CPU-only execution is **NOT SUPPORTED** due to NVTX (NVIDIA Tools Extension) function dependencies. This project requires an NVIDIA GPU to run. The CPU installation option is provided for reference only.
+> **⚠️ Warning**: CPU-only execution is **NOT SUPPORTED** due to NVTX (NVIDIA Tools Extension) function dependencies. This project requires an NVIDIA GPU to run.
 
 </details>
 
-**Step 3**: Install additional dependencies
+**Step 3**: Verify the installation
+
 ```bash
-pip install ema-pytorch==0.7.7 geomloss==0.2.6 --no-deps
-pip install accelerate==0.17.1 e3nn==0.5.6 einops==0.8.1 imageio==2.37.0 matplotlib==3.9.4 meshio==5.3.5 numpy==1.26.4 pandas==2.3.0 plotly==6.2.0 roma==1.5.3 shapely==2.0.7 svgpathtools==1.7.1 svgutils==0.3.4 svgwrite==1.4.3 torchmetrics==0.11.4 tqdm==4.67.1 svg.path==7.0
+python -c "
+import torch, dgl, dgl.function as fn, torch_geometric
+from torch_geometric.nn import radius_graph
+print('torch', torch.__version__, '| CUDA available:', torch.cuda.is_available(), '| GPU:', torch.cuda.get_device_name(0))
+g = dgl.graph((torch.tensor([0, 1, 2]), torch.tensor([1, 2, 0]))).to('cuda')
+g.ndata['h'] = torch.ones(3, 4, device='cuda')
+g.update_all(fn.copy_u('h', 'm'), fn.sum('m', 'h2'))
+print('dgl', dgl.__version__, 'OK | pyg', torch_geometric.__version__, 'radius_graph OK:', radius_graph(torch.rand(50, 3, device='cuda'), 0.3).shape)
+"
+# Quick end-to-end test (~1 min)
+python run_sampling.py --target_shape Circle.pt --num_samples 1 --device cuda --no_plots
 ```
+
+Expected output of the first command (GPU name will differ):
+
+```
+torch 2.8.0+cu128 | CUDA available: True | GPU: NVIDIA GeForce RTX 5070 Ti
+dgl 2.4.0+cu124 OK | pyg 2.6.1 radius_graph OK: torch.Size([2, ...])
+```
+
+If it hangs or prints `CUDA capability sm_XX is not compatible with the current PyTorch installation`, the installed PyTorch build does not support your GPU — see [Troubleshooting](#troubleshooting).
 
 ---
 
@@ -177,18 +242,19 @@ generated_designs/design_name_YYYYMMDD_HHMMSS/
 
 ### System Requirements
 
-- Python 3.9 (binary wheels compatibility)
+- Python 3.10 (pinned in `environment.yml`; DGL 2.4.0 conda builds exist for Python 3.8–3.12)
 - Windows: Visual C++ 14.3 runtime
 - Linux: GCC 7.5+ or equivalent
 
 ### Environment Management
 
 ```bash
-# Remove environment
-conda env remove -n generativeSNUPI
+# Update the environment after environment.yml changes
+conda env update -n generativeSNUPI -f environment.yml --prune
 
-# Recreate environment
-conda create -n generativeSNUPI python=3.9 -y
+# Remove and recreate the environment from scratch
+conda env remove -n generativeSNUPI
+conda env create -f environment.yml
 ```
 
 ### Directory Structure
@@ -205,9 +271,30 @@ conda create -n generativeSNUPI python=3.9 -y
 
 ## Troubleshooting
 
-### CUDA Library Compatibility (System CUDA > 11.7)
+### RTX 50xx (Blackwell): `sm_120 is not compatible` / GPU hangs
 
-If your system has a CUDA version newer than 11.7 (e.g. CUDA 12.x or 13.x), DGL may fail to load with an error like:
+RTX 50xx GPUs need PyTorch ≥ 2.7 built with CUDA ≥ 12.8. Older builds (e.g. the legacy PyTorch 1.13.1 + CUDA 11.7, or PyTorch ≤ 2.6) have no `sm_120` kernels, so a simple CUDA operation either hangs or fails with `no kernel image is available`. Recreate the environment from `environment.yml`:
+
+```bash
+conda env remove -n generativeSNUPI
+conda env create -f environment.yml
+```
+
+### `ModuleNotFoundError: No module named 'setuptools.extern'` when importing DGL
+
+DGL 2.x imports `setuptools.extern.packaging`, which newer setuptools no longer provides. `environment.yml` already pins it; in a manually built environment run:
+
+```bash
+pip install "setuptools<70"
+```
+
+### `CUDA out of memory` on large shapes
+
+Large targets need several GB of free GPU memory (e.g. `Monalisa_v1.pt` allocates ~8 GB in one step). Check `nvidia-smi` for other processes using the GPU and stop them, or generate fewer samples at a time. Setting `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` can help with fragmentation.
+
+### CUDA Library Compatibility (Legacy CUDA 11.7 install)
+
+This applies to the **legacy CUDA 11.7** install only. If your system has a CUDA version newer than 11.7 (e.g. CUDA 12.x or 13.x), DGL may fail to load with an error like:
 
 ```
 OSError: libcusparse.so.11: cannot open shared object file: No such file or directory
