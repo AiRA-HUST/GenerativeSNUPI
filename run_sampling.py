@@ -367,9 +367,10 @@ Examples:
                 design_name=design_name,
                 save_coordinates=not args.no_save,
                 show_plots=not args.no_plots,
-                variation_range=args.variation_range
+                variation_range=args.variation_range,
+                target_shape_path=args.target_shape
             )
-            
+
             # Print results summary
             print("\n" + "="*60)
             print("🎉 CONDITIONAL DNA STRUCTURE GENERATION COMPLETE!")

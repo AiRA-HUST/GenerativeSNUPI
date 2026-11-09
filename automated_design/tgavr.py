@@ -1749,10 +1749,12 @@ def _ssr_kw(cfg):
 
 def run_router(coords: torch.Tensor, routing_kwargs: dict, seed: Optional[int] = 0,
                staple_resplit: bool = False, staple_resplit_min: int = 20,
-               staple_xover_cleanup: bool = False, ss_rematch: Optional[dict] = None):
+               staple_xover_cleanup: bool = False, ss_rematch: Optional[dict] = None,
+               show: bool = False):
     """
     Call the unchanged ``automated_DnaOrigami`` and capture exceptions and warnings.
-    Plot calls (``fig.show``) inside the router are suppressed for batch use.
+    Plot calls (``fig.show``) inside the router are suppressed for batch use unless
+    ``show=True`` (then the router's own ``show`` argument is passed through).
     With ``staple_resplit`` the router's ``staples_routing`` result is post-processed by
     ``resplit_long_staples`` (opt-in; the router code itself is not modified).
     Returns (outputs or None, info dict).
@@ -1775,7 +1777,8 @@ def run_router(coords: torch.Tensor, routing_kwargs: dict, seed: Optional[int] =
     try:
         import plotly.graph_objects as go
         _show = go.Figure.show
-        go.Figure.show = lambda *a, **k: None
+        if not show:
+            go.Figure.show = lambda *a, **k: None
     except Exception:          # plotly missing -> nothing to suppress
         go, _show = None, None
     out = None
@@ -1783,7 +1786,7 @@ def run_router(coords: torch.Tensor, routing_kwargs: dict, seed: Optional[int] =
         with warnings.catch_warnings(record=True) as W, contextlib.redirect_stdout(io.StringIO()):
             warnings.simplefilter("always")
             try:
-                out = automated_DnaOrigami(coords.clone(), show=False, **routing_kwargs)
+                out = automated_DnaOrigami(coords.clone(), show=show, **routing_kwargs)
             except Exception as e:     # routing failure
                 tb = traceback.extract_tb(e.__traceback__)
                 names = [f.name for f in tb]

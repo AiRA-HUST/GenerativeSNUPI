@@ -196,24 +196,28 @@ router may leave a staple longer than 50 bp, find no valid nick, or fail on badl
 - post-processes three router steps without changing the geometry: staple splitting, conflicting
   staple crossovers, and single-strand pairing at junctions.
 
-It is **disabled by default**. With it disabled, routing runs exactly as before. The diffusion model,
+It is **enabled by default**, and the original routing always runs first. Only a design that the
+original routing cannot route validly (an exception, or a staple longer than 50 bp) is repaired
+and routed again. A design that already routes is exported exactly as before. The diffusion model,
 the router modules and the scaffold sequences are not modified.
+
+`run_sampling.py` passes `--target_shape` to the routing automatically. To route an existing
+design:
 
 ```python
 from routing import route_generated_design
 
-# original routing
-route_generated_design("generated_designs/<folder>/<design>.pt")
-
-# routing with TGAVR (recommended configuration, up to 15 routing calls)
+# routing with TGAVR (default; recommended configuration, up to 15 routing calls)
 route_generated_design("generated_designs/<folder>/<design>.pt",
-                       enable_tgavr=True,
                        target_shape="Miura_ori_4x4_40PercentFolded_best.pt")
+
+# original routing only
+route_generated_design("generated_designs/<folder>/<design>.pt", enable_tgavr=False)
 ```
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `enable_tgavr` | Enable the repair | `False` |
+| `enable_tgavr` | Repair designs the original routing fails on | `True` |
 | `target_shape` | Target used to generate the design: a `.ply` / `.stl` / `.pt` path or a file name in `target_shapes/`. With `None`, vertex repair is skipped and the router-guided repairs still run | `None` |
 | `tgavr_config` | `automated_design.tgavr.TGAVRConfig`, e.g. `TGAVRConfig.recommended(max_routing_attempts=5)` | `TGAVRConfig.recommended()` |
 | `tgavr_seed` | Router seed used during the repair | `0` |
@@ -251,7 +255,7 @@ generated_designs/design_name_YYYYMMDD_HHMMSS/
 ├── design_name_sample_001.dat.pdb # PDB structure file
 ├── design_name_sample_001_mean.pt # PyTorch mean data
 ├── design_name_sample_001_seq.pt  # PyTorch sequence data
-├── design_name_sample_001_tgavr.json        # TGAVR report (only with enable_tgavr=True)
+├── design_name_sample_001_tgavr.json        # TGAVR report (only if the design was repaired)
 └── design_name_sample_001_tgavr_coords.pt   # repaired coordinates (only if TGAVR changed them)
 ```
 

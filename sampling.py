@@ -300,11 +300,12 @@ class DNAStructureGenerator:
         design_name: str = "sample",
         save_coordinates: bool = True,
         show_plots: bool = True,
-        variation_range: float = 0.05
+        variation_range: float = 0.05,
+        target_shape_path: str = None
     ) -> Dict[str, Any]:
         """
         Generate DNA structure samples based on target shape.
-        
+
         Args:
             target_shape: Target shape tensor
             num_base_pairs: Number of base pairs in the structure
@@ -314,7 +315,9 @@ class DNAStructureGenerator:
             save_coordinates: Whether to save coordinate files
             show_plots: Whether to display plots
             variation_range: Range for random variation in base pairs count
-            
+            target_shape_path: Target file the shape was loaded from; passed to the
+                routing so that TGAVR can repair the design against it
+
         Returns:
             Dictionary containing generation results and paths
         """
@@ -386,7 +389,8 @@ class DNAStructureGenerator:
                     
                     # Try to route the generated design
                     logger.info(f"Attempting to route generated design: {coords_filename}")
-                    routing_success = route_generated_design(str(coords_path), show=show_plots)
+                    routing_success = route_generated_design(str(coords_path), show=show_plots,
+                                                             target_shape=target_shape_path)
                     
                     if routing_success:
                         logger.info(f"\n🎉 SUCCESS! DNA origami design routing completed successfully!")

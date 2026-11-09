@@ -20,7 +20,7 @@ def route_generated_design(pt_file_path,
                           adjust_short_edges=4,
                           adjust_long_edges=4,
                           show=False,
-                          enable_tgavr=False,
+                          enable_tgavr=True,
                           target_shape=None,
                           tgavr_config=None,
                           tgavr_seed=0):
@@ -36,8 +36,11 @@ def route_generated_design(pt_file_path,
         adjust_short_edges (int): Short edge adjustment parameter
         adjust_long_edges (int): Long edge adjustment parameter
         show (bool): Whether to show design states/visualization
-        enable_tgavr (bool): Optional Target-Guided Adaptive Vertex Repair and
-            router-guided repair (default False -> original behaviour, unchanged)
+        enable_tgavr (bool): Target-Guided Adaptive Vertex Repair (default True).  The
+            original routing runs first; only if it raises or fails validation (e.g. a
+            staple > 50 bp) is the design repaired and routed again.  Designs the
+            original routing handles are therefore exported exactly as before.
+            False -> original routing only.
         target_shape (str): Target of the design: a .ply/.stl file, a .pt centre-line
             target (topology recovered), or a file name in target_shapes/.  None ->
             no vertex repair; the router-guided repairs (no target needed) still run.
@@ -75,12 +78,13 @@ def route_generated_design(pt_file_path,
         print(f"Loaded coordinates with shape: {coords.shape}")
         
         if enable_tgavr:
-            # Optional: target-guided vertex repair, then the unchanged routing
+            # Original routing first; TGAVR repair only if it fails validation
             dnaGeom, dnaTop, \
             coords, triads, bp_Hindex, \
             coords_scaf, scaf_route, coords_stap, node_scaf_seq, \
             stap_routes, unbound_nucle_coords = _route_with_tgavr(
                 coords, target_shape, tgavr_config, export_folder, file_basename, tgavr_seed,
+                show,
                 dict(min_COs_distance=min_COs_distance,
                      min_pairing_len=min_pairing_len,
                      additional_SSseq=additional_SSseq,
@@ -164,12 +168,28 @@ def route_generated_design(pt_file_path,
 
 
 def _route_with_tgavr(coords, target_shape, tgavr_config, export_folder, file_basename,
-                      seed, routing_kwargs):
-    """Run TGAVR + the unchanged automated_DnaOrigami; save the repair report."""
+                      seed, show, routing_kwargs):
+    """Route with the unchanged automated_DnaOrigami; if the result is not valid, run
+    TGAVR (repair + routing) and save its report.  Returns the router outputs."""
     import json
-    from automated_design.tgavr import tgavr_route, TGAVRConfig
+    from automated_design.tgavr import tgavr_route, TGAVRConfig, run_router, validate_routing
+    # 1. original routing, exactly as without TGAVR (same call, no re-seeding)
+    out0, info0 = run_router(coords, routing_kwargs, seed=None, show=show)
+    val0 = validate_routing(out0, info0)
+    if val0['success']:
+        print("TGAVR: original routing is valid, no repair needed")
+        return out0
+    print(f"TGAVR: original routing failed ({val0['category']}), repairing the design")
+    # 2. repair and route again
     cfg = tgavr_config or TGAVRConfig.recommended()
-    out, coords_used, report = tgavr_route(coords, target_shape, routing_kwargs, cfg=cfg, seed=seed)
+    try:
+        out, coords_used, report = tgavr_route(coords, target_shape, routing_kwargs,
+                                               cfg=cfg, seed=seed)
+    except Exception as e:
+        if out0 is None:
+            raise
+        print(f"⚠ Warning: TGAVR failed ({e}); exporting the original routing")
+        return out0
     clean = {k: v for k, v in report.items() if not k.startswith('_')}
     report_path = os.path.join(export_folder, f"{file_basename}_tgavr.json")
     with open(report_path, 'w') as f:
@@ -185,6 +205,10 @@ def _route_with_tgavr(coords, target_shape, tgavr_config, export_folder, file_ba
     if clean.get('geometry_changed'):
         torch.save(coords_used, os.path.join(export_folder, f"{file_basename}_tgavr_coords.pt"))
     if out is None:
+        if out0 is not None:        # keep what the original routing produced
+            print("⚠ Warning: TGAVR found no routable design; exporting the original routing "
+                  f"({val0['category']})")
+            return out0
         raise RuntimeError(f"routing failed after TGAVR: {clean['attempts'][-1].get('exception')}")
     if not val.get('success'):
         print(f"⚠ Warning: routed design fails validation ({val.get('category')})")
@@ -199,7 +223,7 @@ def route_generated_design_batch(subfolder_name,
                           adjust_short_edges=4,
                           adjust_long_edges=4,
                           show=False,
-                          enable_tgavr=False,
+                          enable_tgavr=True,
                           target_shape=None,
                           tgavr_config=None,
                           tgavr_seed=0):
@@ -210,7 +234,7 @@ def route_generated_design_batch(subfolder_name,
         subfolder_name (str): Name of the subfolder in generated_designs 
                              (e.g., "01_tetrahedron_20250704_120712")
         Other parameters: DNA origami design parameters and the optional TGAVR
-            settings of route_generated_design (disabled by default)
+            settings of route_generated_design (enabled by default)
     
     Returns:
         bool: True if successful, False if all files failed
