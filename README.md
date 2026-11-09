@@ -9,6 +9,7 @@
 - [Installation](#installation)
 - [Usage](#usage)
   - [Conditional Generation](#conditional-generation)
+  - [Routing Repair (optional)](#routing-repair-optional)
 - [Input/Output](#inputoutput)
 - [Configuration](#configuration)
 - [Development](#development)
@@ -28,6 +29,7 @@
 - **Multi-format Input Support**: SVG, PLY, STL, and PT files
 - **Conditional Generation**: Generate designs from target shapes
 - **Automated Routing**: Converts coordinates to complete design files
+- **Routing Repair (optional)**: Target-Guided Adaptive Vertex Repair (TGAVR) fixes generated designs that the router cannot route, without retraining
 - **Multiple Output Formats**: CanDo, BILD, oxDNA, PDB, and PyTorch tensors
 - **GPU Acceleration**: CUDA support for faster generation
 
@@ -182,6 +184,50 @@ python run_sampling.py --target_shape Circle.pt --num_samples 4 --device cuda
 python run_sampling.py --target_shape Monalisa_v1.pt --num_samples 10 --device cuda --no_plots
 ```
 
+### Routing Repair (optional)
+
+Some generated designs cannot be routed: at vertices and junctions, where several duplexes meet, the
+router may leave a staple longer than 50 bp, find no valid nick, or fail on badly paired helix ends.
+**TGAVR** (Target-Guided Adaptive Vertex Repair) is an optional step in front of the router. It:
+
+- aligns the target shape to the generated coordinates and repairs defective vertex regions;
+- makes small, bounded edits to helix-end lengths (at most a few % of the base pairs), judged by
+  the router's own stages;
+- post-processes three router steps without changing the geometry: staple splitting, conflicting
+  staple crossovers, and single-strand pairing at junctions.
+
+It is **disabled by default**. With it disabled, routing runs exactly as before. The diffusion model,
+the router modules and the scaffold sequences are not modified.
+
+```python
+from routing import route_generated_design
+
+# original routing
+route_generated_design("generated_designs/<folder>/<design>.pt")
+
+# routing with TGAVR (recommended configuration, up to 15 routing calls)
+route_generated_design("generated_designs/<folder>/<design>.pt",
+                       enable_tgavr=True,
+                       target_shape="Miura_ori_4x4_40PercentFolded_best.pt")
+```
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `enable_tgavr` | Enable the repair | `False` |
+| `target_shape` | Target used to generate the design: a `.ply` / `.stl` / `.pt` path or a file name in `target_shapes/`. With `None`, vertex repair is skipped and the router-guided repairs still run | `None` |
+| `tgavr_config` | `automated_design.tgavr.TGAVRConfig`, e.g. `TGAVRConfig.recommended(max_routing_attempts=5)` | `TGAVRConfig.recommended()` |
+| `tgavr_seed` | Router seed used during the repair | `0` |
+
+`route_generated_design_batch` accepts the same arguments.
+
+Notes:
+
+- The design is routed from the repaired coordinates. They are saved as `<name>_tgavr_coords.pt`
+  when they differ from the input.
+- Every repair and routing attempt is written to `<name>_tgavr.json`.
+- A warning is printed when the scaffold is longer than 7560 nt (the longest scaffold sequence
+  shipped). This depends on the design size, not on the repair.
+
 ## Input/Output
 
 ### Input Files
@@ -204,7 +250,9 @@ generated_designs/design_name_YYYYMMDD_HHMMSS/
 ├── design_name_sample_001.top     # oxDNA topology
 ├── design_name_sample_001.dat.pdb # PDB structure file
 ├── design_name_sample_001_mean.pt # PyTorch mean data
-└── design_name_sample_001_seq.pt  # PyTorch sequence data
+├── design_name_sample_001_seq.pt  # PyTorch sequence data
+├── design_name_sample_001_tgavr.json        # TGAVR report (only with enable_tgavr=True)
+└── design_name_sample_001_tgavr_coords.pt   # repaired coordinates (only if TGAVR changed them)
 ```
 
 ### File Usage
@@ -262,6 +310,7 @@ conda env create -f environment.yml
 ```
 ├── pretrained_models/    # Pre-trained model files
 ├── configs/              # Configuration files
+├── automated_design/     # Routing (tgavr.py: optional routing repair)
 ├── target_shapes/        # Input shape files
 ├── generated_designs/    # Output directory
 └── run_sampling.py       # Main execution script
