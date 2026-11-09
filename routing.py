@@ -19,20 +19,32 @@ def route_generated_design(pt_file_path,
                           adaptive_staples=False,
                           adjust_short_edges=4,
                           adjust_long_edges=4,
-                          show=False):
+                          show=False,
+                          enable_tgavr=False,
+                          target_shape=None,
+                          tgavr_config=None,
+                          tgavr_seed=0):
     """
     Process a single .pt file and generate DNA origami design files.
-    
+
     Args:
         pt_file_path (str): Path to the .pt file to process
         min_COs_distance (int): Minimum crossover distance parameter
-        min_pairing_len (int): Minimum pairing length parameter  
+        min_pairing_len (int): Minimum pairing length parameter
         additional_SSseq (int): Additional single-strand sequence parameter
         adaptive_staples (bool): Whether to use adaptive staples
         adjust_short_edges (int): Short edge adjustment parameter
         adjust_long_edges (int): Long edge adjustment parameter
         show (bool): Whether to show design states/visualization
-    
+        enable_tgavr (bool): Optional Target-Guided Adaptive Vertex Repair and
+            router-guided repair (default False -> original behaviour, unchanged)
+        target_shape (str): Target of the design: a .ply/.stl file, a .pt centre-line
+            target (topology recovered), or a file name in target_shapes/.  None ->
+            no vertex repair; the router-guided repairs (no target needed) still run.
+        tgavr_config (automated_design.tgavr.TGAVRConfig): TGAVR parameters; default
+            TGAVRConfig.recommended() (benchmark method M8, 15 routing calls)
+        tgavr_seed (int): router seed used by TGAVR (0 = the benchmark setting)
+
     Returns:
         bool: True if successful, False if failed
     """
@@ -62,18 +74,32 @@ def route_generated_design(pt_file_path,
         
         print(f"Loaded coordinates with shape: {coords.shape}")
         
-        # Process through automated DNA origami design
-        dnaGeom, dnaTop, \
-        coords, triads, bp_Hindex, \
-        coords_scaf, scaf_route, coords_stap, node_scaf_seq, \
-        stap_routes, unbound_nucle_coords = automated_DnaOrigami(coords, 
-                                           min_COs_distance=min_COs_distance,
-                                           min_pairing_len=min_pairing_len,
-                                           additional_SSseq=additional_SSseq,
-                                           adaptive_staples=adaptive_staples,
-                                           adjust_short_edges=adjust_short_edges,
-                                           adjust_long_edges=adjust_long_edges,
-                                           show=show)
+        if enable_tgavr:
+            # Optional: target-guided vertex repair, then the unchanged routing
+            dnaGeom, dnaTop, \
+            coords, triads, bp_Hindex, \
+            coords_scaf, scaf_route, coords_stap, node_scaf_seq, \
+            stap_routes, unbound_nucle_coords = _route_with_tgavr(
+                coords, target_shape, tgavr_config, export_folder, file_basename, tgavr_seed,
+                dict(min_COs_distance=min_COs_distance,
+                     min_pairing_len=min_pairing_len,
+                     additional_SSseq=additional_SSseq,
+                     adaptive_staples=adaptive_staples,
+                     adjust_short_edges=adjust_short_edges,
+                     adjust_long_edges=adjust_long_edges))
+        else:
+            # Process through automated DNA origami design
+            dnaGeom, dnaTop, \
+            coords, triads, bp_Hindex, \
+            coords_scaf, scaf_route, coords_stap, node_scaf_seq, \
+            stap_routes, unbound_nucle_coords = automated_DnaOrigami(coords,
+                                               min_COs_distance=min_COs_distance,
+                                               min_pairing_len=min_pairing_len,
+                                               additional_SSseq=additional_SSseq,
+                                               adaptive_staples=adaptive_staples,
+                                               adjust_short_edges=adjust_short_edges,
+                                               adjust_long_edges=adjust_long_edges,
+                                               show=show)
         
         print("✓ DNA origami design completed successfully")
         
@@ -137,21 +163,54 @@ def route_generated_design(pt_file_path,
         return False
 
 
-def route_generated_design_batch(subfolder_name, 
+def _route_with_tgavr(coords, target_shape, tgavr_config, export_folder, file_basename,
+                      seed, routing_kwargs):
+    """Run TGAVR + the unchanged automated_DnaOrigami; save the repair report."""
+    import json
+    from automated_design.tgavr import tgavr_route, TGAVRConfig
+    cfg = tgavr_config or TGAVRConfig.recommended()
+    out, coords_used, report = tgavr_route(coords, target_shape, routing_kwargs, cfg=cfg, seed=seed)
+    clean = {k: v for k, v in report.items() if not k.startswith('_')}
+    report_path = os.path.join(export_folder, f"{file_basename}_tgavr.json")
+    with open(report_path, 'w') as f:
+        json.dump(clean, f, indent=1, default=str)
+    val = clean.get('validation', {})
+    print(f"TGAVR: vertex repair: {clean.get('reason')} | routing calls: "
+          f"{clean.get('routing_calls')} | validation: {val.get('category')} "
+          f"(max staple {val.get('max_staple')} bp, scaffold {val.get('scaffold_nt')} nt) | "
+          f"report: {report_path}")
+    if val.get('scaffold_fits_M13') is False:
+        print(f"⚠ Warning: scaffold of {val.get('scaffold_nt')} nt is longer than the longest "
+              f"shipped scaffold sequence (7560 nt)")
+    if clean.get('geometry_changed'):
+        torch.save(coords_used, os.path.join(export_folder, f"{file_basename}_tgavr_coords.pt"))
+    if out is None:
+        raise RuntimeError(f"routing failed after TGAVR: {clean['attempts'][-1].get('exception')}")
+    if not val.get('success'):
+        print(f"⚠ Warning: routed design fails validation ({val.get('category')})")
+    return out
+
+
+def route_generated_design_batch(subfolder_name,
                           min_COs_distance=15,
                           min_pairing_len=4,
                           additional_SSseq=1,
                           adaptive_staples=False,
                           adjust_short_edges=4,
                           adjust_long_edges=4,
-                          show=False):
+                          show=False,
+                          enable_tgavr=False,
+                          target_shape=None,
+                          tgavr_config=None,
+                          tgavr_seed=0):
     """
     Process .pt files from a generated_designs subfolder (legacy function).
     
     Args:
         subfolder_name (str): Name of the subfolder in generated_designs 
                              (e.g., "01_tetrahedron_20250704_120712")
-        Other parameters: DNA origami design parameters
+        Other parameters: DNA origami design parameters and the optional TGAVR
+            settings of route_generated_design (disabled by default)
     
     Returns:
         bool: True if successful, False if all files failed
@@ -214,7 +273,11 @@ def route_generated_design_batch(subfolder_name,
                                        adaptive_staples=adaptive_staples,
                                        adjust_short_edges=adjust_short_edges,
                                        adjust_long_edges=adjust_long_edges,
-                                       show=show)
+                                       show=show,
+                                       enable_tgavr=enable_tgavr,
+                                       target_shape=target_shape,
+                                       tgavr_config=tgavr_config,
+                                       tgavr_seed=tgavr_seed)
         
         if success:
             print(f"\n✓ Successfully processed {os.path.basename(pt_file)} and exported design files!")
